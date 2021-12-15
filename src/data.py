@@ -10,7 +10,7 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.metrics import precision_score, recall_score, f1_score
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 
 
 class TextTranslationMatrix:
@@ -57,7 +57,7 @@ class TextTranslationMatrix:
 
         yield sample
 
-    def create_samples(self, label_on='text', split=0.5):
+    def _create_samples(self, label_on='text', split=0.9):
         assert label_on in ['text', 'translator']
 
         samples = []
@@ -75,6 +75,8 @@ class TextTranslationMatrix:
 
     def create_model(self, label_on='text', feature_extractors=[]):
         assert label_on in ['text', 'translator']
+        labels = self.texts if label_on == 'text' else self.translators
+
         X_train, X_test, y_train, y_test = self._create_samples(label_on=label_on)
 
         def extract_features(sample):
@@ -92,8 +94,7 @@ class TextTranslationMatrix:
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)
 
-        precision, recall, f1 = self.evaluate(y_test, y_pred, labels=self.texts
-                                              if label_on == 'text' else self.translators)
+        precision, recall, f1 = self.evaluate(y_test, y_pred, labels=labels)
         return clf, {'precision': precision, 'recall': recall, 'f1': f1}
 
     @staticmethod
