@@ -4,3 +4,4 @@
 # Ignore transcription files.
 tools/*-aeneis/
 tools/*-oresteia/
+src/__pycache__/
