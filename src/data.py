@@ -7,9 +7,10 @@ Utility classes for loading the dataset and generating train and test data.
 """
 
 from pathlib import Path
-from sklearn.model_selection import train_test_split
+from statistics import mean
 from sklearn.svm import SVC
-from sklearn.metrics import precision_score, recall_score, f1_score
+from sklearn.model_selection import cross_validate, StratifiedKFold, RepeatedStratifiedKFold, LeaveOneOut
+from sklearn.metrics import precision_score, recall_score, f1_score, make_scorer
 
 
 class TextTranslationMatrix:
@@ -56,7 +57,7 @@ class TextTranslationMatrix:
 
         yield sample
 
-    def _create_samples(self, label_on='text', split=0.9):
+    def _create_samples(self, label_on='text'):
         assert label_on in ['text', 'translator']
 
         samples = []
@@ -67,39 +68,39 @@ class TextTranslationMatrix:
 
         label_index = 1 if label_on == 'text' else 2
 
-        a = [s[0] for s in samples]
-        b = [s[label_index] for s in samples]
+        X = [s[0] for s in samples]
+        y = [s[label_index] for s in samples]
 
-        return train_test_split(a, b, train_size=split, shuffle=True)
+        return X, y
 
-    def create_model(self, label_on='text', feature_extractors=[]):
+    def cross_validate(self, label_on='text', feature_extractors=[]):
         assert label_on in ['text', 'translator']
         labels = self.texts if label_on == 'text' else self.translators
 
-        X_train, X_test, y_train, y_test = self._create_samples(label_on=label_on)
+        X, y = self._create_samples(label_on=label_on)
 
-        def extract_features(sample):
+        def _extract_features(sample):
             features = []
 
-            for f_ex in feature_extractors:
-                features.extend(f_ex(sample))
+            for ft_ex in feature_extractors:
+                features.extend(ft_ex(sample))
 
             return features
 
-        X_train = list(map(extract_features, X_train))
-        X_test = list(map(extract_features, X_test))
+        features = list(map(_extract_features, X))
 
-        clf = SVC(kernel='linear')
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
+        estimator = SVC(kernel='linear')
+        cv = RepeatedStratifiedKFold(random_state=42)
+        scoring = {
+            'precision': make_scorer(precision_score, labels=labels, average='macro'),
+            'recall': make_scorer(recall_score, labels=labels, average='macro'),
+            'f1': make_scorer(f1_score, labels=labels, average='macro'),
+        }
 
-        precision, recall, f1 = self.evaluate(y_test, y_pred, labels=labels)
-        return clf, {'precision': precision, 'recall': recall, 'f1': f1}
+        results = cross_validate(estimator, features, y, scoring=scoring, cv=cv)
 
-    @staticmethod
-    def evaluate(y, y_pred, labels):
-        precision = precision_score(y, y_pred, labels=labels, average='macro').item()
-        recall = recall_score(y, y_pred, labels=labels, average='macro').item()
-        f1 = f1_score(y, y_pred, labels=labels, average='macro').item()
-
-        return precision, recall, f1
+        return {
+            'precision': mean(results['test_precision']),
+            'recall': mean(results['test_recall']),
+            'f1': mean(results['test_f1']),
+        }
