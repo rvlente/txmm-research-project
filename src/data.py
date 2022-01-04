@@ -8,9 +8,12 @@ Utility classes for loading the dataset and generating train and test data.
 
 from pathlib import Path
 from statistics import mean
-from sklearn.svm import SVC
-from sklearn.model_selection import cross_validate, StratifiedKFold, RepeatedStratifiedKFold, LeaveOneOut
+
+from sklearn.svm import LinearSVC
+from sklearn.model_selection import cross_validate, RepeatedStratifiedKFold
 from sklearn.metrics import precision_score, recall_score, f1_score, make_scorer
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.pipeline import Pipeline
 
 
 class TextTranslationMatrix:
@@ -83,21 +86,21 @@ class TextTranslationMatrix:
             features = []
 
             for ft_ex in feature_extractors:
-                features.extend(ft_ex(sample))
+                features.extend(ft_ex.extract(sample))
 
             return features
 
         features = list(map(_extract_features, X))
 
-        estimator = SVC(kernel='linear')
-        cv = RepeatedStratifiedKFold(random_state=42)
+        pipe = Pipeline([('scale', MinMaxScaler()), ('clf', LinearSVC())])
+        cv = RepeatedStratifiedKFold(random_state=1337)
         scoring = {
             'precision': make_scorer(precision_score, labels=labels, average='macro'),
             'recall': make_scorer(recall_score, labels=labels, average='macro'),
             'f1': make_scorer(f1_score, labels=labels, average='macro'),
         }
 
-        results = cross_validate(estimator, features, y, scoring=scoring, cv=cv)
+        results = cross_validate(pipe, features, y, scoring=scoring, cv=cv)
 
         return {
             'precision': mean(results['test_precision']),
