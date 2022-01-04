@@ -3,20 +3,13 @@
 data.py
 =======
 
-Utility classes for loading the dataset and generating train and test data.
+Utility class for loading the dataset and generating samples.
 """
 
 from pathlib import Path
-from statistics import mean
-
-from sklearn.svm import LinearSVC
-from sklearn.model_selection import cross_validate, RepeatedStratifiedKFold
-from sklearn.metrics import precision_score, recall_score, f1_score, make_scorer
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.pipeline import Pipeline
 
 
-class TextTranslationMatrix:
+class TranslationMatrixCorpus:
 
     def __init__(self, folder, texts, translators):
         self.folder = Path(folder)
@@ -42,7 +35,7 @@ class TextTranslationMatrix:
     def count_words(self, line):
         return len(line.split(' '))
 
-    def _yield_samples(self, text, translator):
+    def _yield_samples(self, text, translator, min_words):
         text_data = self.data[text][translator]
         lines = [line for line in text_data.split('\n') if line]
         sample = ''
@@ -53,21 +46,22 @@ class TextTranslationMatrix:
             sample += '\n'
             wc += self.count_words(line)
 
-            if wc > 500:
+            if wc > min_words:
                 yield sample
                 sample = ''
                 wc = 0
 
         yield sample
 
-    def _create_samples(self, label_on='text'):
+    def create_samples(self, label_on='text', min_words=500):
         assert label_on in ['text', 'translator']
 
         samples = []
 
         for text in self.texts:
             for translator in self.translators:
-                samples.extend((sample, text, translator) for sample in self._yield_samples(text, translator))
+                samples.extend((sample, text, translator)
+                               for sample in self._yield_samples(text, translator, min_words))
 
         label_index = 1 if label_on == 'text' else 2
 
@@ -75,35 +69,3 @@ class TextTranslationMatrix:
         y = [s[label_index] for s in samples]
 
         return X, y
-
-    def cross_validate(self, label_on='text', feature_extractors=[]):
-        assert label_on in ['text', 'translator']
-        labels = self.texts if label_on == 'text' else self.translators
-
-        X, y = self._create_samples(label_on=label_on)
-
-        def _extract_features(sample):
-            features = []
-
-            for ft_ex in feature_extractors:
-                features.extend(ft_ex.extract(sample))
-
-            return features
-
-        features = list(map(_extract_features, X))
-
-        pipe = Pipeline([('scale', MinMaxScaler()), ('clf', LinearSVC())])
-        cv = RepeatedStratifiedKFold(random_state=1337)
-        scoring = {
-            'precision': make_scorer(precision_score, labels=labels, average='macro'),
-            'recall': make_scorer(recall_score, labels=labels, average='macro'),
-            'f1': make_scorer(f1_score, labels=labels, average='macro'),
-        }
-
-        results = cross_validate(pipe, features, y, scoring=scoring, cv=cv)
-
-        return {
-            'precision': mean(results['test_precision']),
-            'recall': mean(results['test_recall']),
-            'f1': mean(results['test_f1']),
-        }
