@@ -11,11 +11,21 @@ from statistics import mean
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import cross_validate, RepeatedStratifiedKFold
 from sklearn.metrics import precision_score, recall_score, f1_score, make_scorer
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 
+from tqdm import tqdm
 
-def evaluate(ttm, label_on='text', feature_extractors=[]):
+
+def _cprint(msg, condition):
+    """
+    One-liner for conditional printing.
+    """
+    if condition:
+        print(msg)
+
+
+def evaluate(ttm, label_on='text', feature_extractors=[], report=False):
     """
     Perform a cross validation of the features on the dataset and report the evaluation measures. 
     """
@@ -25,6 +35,7 @@ def evaluate(ttm, label_on='text', feature_extractors=[]):
 
     X, y = ttm.create_samples(label_on=label_on)
 
+    # Extract features from samples.
     def _extract_features(sample):
         features = []
 
@@ -33,8 +44,12 @@ def evaluate(ttm, label_on='text', feature_extractors=[]):
 
         return features
 
-    features = list(map(_extract_features, X))
+    features = map(_extract_features, X)
 
+    _cprint('Extracting features...', report)
+    features = list(tqdm(features, total=len(X)) if report else features)
+
+    # Cross validate classifiers.
     pipe = Pipeline([('scale', MinMaxScaler()), ('clf', LinearSVC())])
     cv = RepeatedStratifiedKFold(random_state=1337)
     scoring = {
@@ -43,7 +58,11 @@ def evaluate(ttm, label_on='text', feature_extractors=[]):
         'f1': make_scorer(f1_score, labels=labels, average='macro'),
     }
 
+    _cprint('Performing cross validation...', report)
+
     results = cross_validate(pipe, features, y, scoring=scoring, cv=cv)
+
+    _cprint('Done!', report)
 
     return {
         'precision': mean(results['test_precision']),
