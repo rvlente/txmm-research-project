@@ -7,44 +7,48 @@ Utility class for loading the dataset and generating samples.
 """
 
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 
 class TranslationMatrixCorpus:
 
-    def __init__(self, folder, texts, translators):
+    def __init__(self, folder, authors, translators):
         self.folder = Path(folder)
-        self.texts = texts
+        self.authors = authors
         self.translators = translators
 
-        assert self._verify_data(), f'Data invalid for {texts}, {translators}.'
+        assert self._verify_data(), f'Data invalid for {authors}, {translators}.'
 
-        self.data = {text: {translator: self._load_text(text, translator) for translator in self.translators}
-                     for text in self.texts}
+        self.data = {author: {translator: self._load_author(author, translator) for translator in self.translators}
+                     for author in self.authors}
+
+        self.raw = [self.data[author][translator] for author in self.authors for translator in self.translators]
 
     def _verify_data(self):
-        for text in self.texts:
+        for author in self.authors:
             for translator in self.translators:
-                if not (self.folder / text / f'{translator}.txt').exists():
+                if not (self.folder / author / f'{translator}.txt').exists():
                     return False
         return True
 
-    def _load_text(self, text, translator):
-        with open(self.folder / text / f'{translator}.txt') as f:
+    def _load_author(self, author, translator):
+        with open(self.folder / author / f'{translator}.txt') as f:
             return f.read()
 
-    def count_words(self, line):
+    @staticmethod
+    def _count_words(line):
         return len(line.split(' '))
 
-    def _yield_samples(self, text, translator, min_words):
-        text_data = self.data[text][translator]
-        lines = [line for line in text_data.split('\n') if line]
+    def _yield_samples(self, author, translator, min_words):
+        author_data = self.data[author][translator]
+        lines = [line for line in author_data.split('\n') if line]
         sample = ''
         wc = 0
 
         for line in lines:
             sample += line
             sample += '\n'
-            wc += self.count_words(line)
+            wc += self._count_words(line)
 
             if wc > min_words:
                 yield sample
@@ -53,19 +57,29 @@ class TranslationMatrixCorpus:
 
         yield sample
 
-    def create_samples(self, label_on='text', min_words=500):
-        assert label_on in ['text', 'translator']
-
+    def create_samples(self, min_words=500):
         samples = []
 
-        for text in self.texts:
+        for author in self.authors:
             for translator in self.translators:
-                samples.extend((sample, text, translator)
-                               for sample in self._yield_samples(text, translator, min_words))
+                samples.extend((sample, author, translator)
+                               for sample in self._yield_samples(author, translator, min_words))
 
-        label_index = 1 if label_on == 'text' else 2
+        return [s[0] for s in samples], [s[1] for s in samples], [s[2] for s in samples]
 
-        X = [s[0] for s in samples]
-        y = [s[label_index] for s in samples]
+    def plot_distribution(self, min_words=500):
+        X, y_author, y_translator = self.create_samples(min_words)
 
-        return X, y
+        size = len(X)
+        author_labels = sorted(hash(x) for x in y_author)
+        translator_labels = sorted(hash(x) for x in y_translator)
+
+        plt.scatter(range(size), [0] * size, c=author_labels, marker="_", lw=20)
+        plt.scatter(range(size), [1] * size, c=translator_labels, marker="_", lw=20)
+
+        plt.xlim([0, size - 1])
+        plt.ylim([-0.6, 1.6])
+        plt.yticks([0, 1], ['author', 'translator'])
+        plt.xlabel('Sample index')
+
+        plt.show()
