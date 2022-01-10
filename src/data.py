@@ -12,10 +12,11 @@ import matplotlib.pyplot as plt
 
 class TranslationMatrixCorpus:
 
-    def __init__(self, folder, authors, translators):
+    def __init__(self, folder, authors, translators, block_size):
         self.folder = Path(folder)
         self.authors = authors
         self.translators = translators
+        self.block_size = block_size
 
         assert self._verify_data(), f'Data invalid for {authors}, {translators}.'
 
@@ -57,18 +58,18 @@ class TranslationMatrixCorpus:
 
         yield sample
 
-    def create_samples(self, min_words=500):
+    def create_samples(self):
         samples = []
 
         for author in self.authors:
             for translator in self.translators:
                 samples.extend((sample, author, translator)
-                               for sample in self._yield_samples(author, translator, min_words))
+                               for sample in self._yield_samples(author, translator, self.block_size))
 
         return [s[0] for s in samples], [s[1] for s in samples], [s[2] for s in samples]
 
-    def plot_distribution(self, min_words=500):
-        X, y_author, y_translator = self.create_samples(min_words)
+    def plot_distribution(self):
+        X, y_author, y_translator = self.create_samples()
 
         size = len(X)
         author_labels = sorted(hash(x) for x in y_author)
